@@ -23,6 +23,7 @@ app.get('/', (req, res) => {
 app.use('/api/auth', authRouter);
 app.use('/api/tests', require('./routes/tests'));
 app.use('/api/results', require('./routes/results'));
+app.use('/api/assessment', require('./controllers/comprehensiveController'));
 
 // connect to database
 const mongoUri = process.env.MONGO_URI ;

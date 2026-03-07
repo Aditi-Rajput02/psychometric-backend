@@ -15,7 +15,7 @@ router.post('/', auth, async (req, res) => {
 
 router.get('/', auth, async (req, res) => {
   try {
-    const results = await Result.find({ user: req.user.id }).populate('test');
+    const results = await Result.find({ user: req.user.id }).populate('test', 'title assessmentType');
     res.json(results);
   } catch (err) {
     res.status(500).json({ message: err.message });

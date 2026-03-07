@@ -4,7 +4,6 @@ const User = require('../models/User');
 
 function makeToken(payload) {
   const secret = process.env.JWT_SECRET;
-  console.log("seret is ",secret)
   if (!secret) throw new Error('JWT_SECRET is not set in environment');
   return jwt.sign(payload, secret, { expiresIn: '1d' });
 }
@@ -18,7 +17,7 @@ exports.register = async (req, res) => {
     if (password.length < 6) return res.status(400).json({ message: 'Password must be at least 6 characters' });
 
     // Validate role
-    const userRole = role && ['student', 'admin'].includes(role) ? role : 'admin';
+    const userRole = role && ['student', 'admin'].includes(role) ? role : 'student';
 
     const existing = await User.findOne({ email: cleanEmail });
     if (existing) return res.status(400).json({ message: 'User already exists' });
@@ -50,7 +49,6 @@ exports.login = async (req, res) => {
     const cleanEmail = String(email).toLowerCase().trim();
     const user = await User.findOne({ email: cleanEmail });
     if (!user) return res.status(404).json({ message: 'User not found' });
-    console.log("user is ",user)
     const isMatch = await bcrypt.compare(password, user.password);
     if (!isMatch) return res.status(400).json({ message: 'Invalid credentials' });
     let token;
