@@ -37,7 +37,7 @@ Built using **Node.js, Express, and MongoDB**.
 Clone the repository:
 
 ```
-git clone https://github.com/yourusername/psychometric-backend.git
+git clone https://github.com/Aditi-Rajput02/psychometric-backend
 ```
 
 Navigate to the backend folder:
@@ -100,8 +100,9 @@ http://localhost:5000
 
 ---
 
-## 👨‍💻 Author
+## 👨‍💻 Deployed Url
+Backend - http://ec2-13-126-49-114.ap-south-1.compute.amazonaws.com:5000
 
-Developed by **[Aditi Rajput]**
+Frontend - http://movie-checks.s3-website.ap-south-1.amazonaws.com/
 
 ---

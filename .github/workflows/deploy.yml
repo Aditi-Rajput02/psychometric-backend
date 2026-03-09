@@ -1,0 +1,136 @@
+name: Deploy Backend to EC2
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+jobs:
+  build:
+    name: Build Application
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "24"
+          cache: "npm"
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build TypeScript
+        run: npm run build
+
+      - name: Prepare deployment package
+        run: |
+          mkdir deploy
+          cp -r dist deploy/
+          cp package*.json deploy/
+          cp ecosystem.config.cjs deploy/
+          tar -czf deploy.tar.gz -C deploy .
+
+      - name: Upload build artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: deployment-package
+          path: deploy.tar.gz
+          retention-days: 1
+
+  deploy:
+    name: Deploy to EC2
+    needs: build
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Download artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: deployment-package
+
+      - name: Deploy to EC2
+        env:
+          EC2_HOST: ${{ secrets.EC2_HOST }}
+          EC2_USERNAME: ${{ secrets.EC2_USERNAME }}
+          SSH_PRIVATE_KEY: ${{ secrets.EC2_SSH_KEY }}
+        run: |
+          echo "$SSH_PRIVATE_KEY" > private_key.pem
+          chmod 600 private_key.pem
+
+          # Upload build to server
+          scp -i private_key.pem -o StrictHostKeyChecking=no \
+          deploy.tar.gz ${EC2_USERNAME}@${EC2_HOST}:/tmp/
+
+          # SSH and deploy
+          ssh -i private_key.pem -o StrictHostKeyChecking=no \
+          ${EC2_USERNAME}@${EC2_HOST} << 'EOF'
+
+          cd /var/www/express-app
+
+          echo "Fixing permissions..."
+          sudo chown -R $USER:$USER /var/www/express-app
+
+          echo "Creating backup..."
+          if [ -d "dist" ]; then
+            mkdir -p backups
+            timestamp=$(date +%Y%m%d_%H%M%S)
+            tar -czf backups/backup_$timestamp.tar.gz dist package.json ecosystem.config.cjs .env 2>/dev/null || true
+          fi
+
+          echo "Extracting new deployment..."
+          tar --overwrite -xzf /tmp/deploy.tar.gz -C /var/www/express-app
+          rm /tmp/deploy.tar.gz
+
+          echo "Installing production dependencies..."
+          npm ci --omit=dev
+
+          echo "Creating .env if not exists..."
+          if [ ! -f .env ]; then
+            echo "NODE_ENV=production" > .env
+            echo "PORT=5000" >> .env
+          fi
+
+          mkdir -p logs
+
+          echo "Starting / Reloading PM2..."
+
+          if pm2 describe express-app > /dev/null 2>&1; then
+            pm2 reload ecosystem.config.cjs --update-env
+          else
+            pm2 start ecosystem.config.cjs
+          fi
+
+          pm2 save
+
+          echo "Deployment completed."
+
+          EOF
+
+          rm private_key.pem
+
+      - name: Verify deployment
+        env:
+          EC2_HOST: ${{ secrets.EC2_HOST }}
+        run: |
+          echo "Waiting for server..."
+          sleep 10
+
+          for i in {1..5}
+          do
+            response=$(curl -s -o /dev/null -w "%{http_code}" http://${EC2_HOST}:5000 || echo "000")
+
+            if [ "$response" = "200" ] || [ "$response" = "301" ] || [ "$response" = "302" ]; then
+              echo "Deployment successful! Response: $response"
+              exit 0
+            fi
+
+            echo "Attempt $i failed (code: $response), retrying..."
+            sleep 5
+          done
+
+          echo "Deployment verification failed."
+          exit 1
